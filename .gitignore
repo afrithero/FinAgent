@@ -1,0 +1,9 @@
+# Python
+__pycache__/
+.pytest_cache
+
+# Data
+data/
+*.csv
+*.tsv
+*.json
