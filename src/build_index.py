@@ -1,7 +1,5 @@
 from embedder.embedder_factory import EmbedderFactory
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from vectordb.faiss_db import FaissVectorDB
-from llama_index.core import Document
 from dataset.finder_dataset import FinderDataset
 
 if __name__ == "__main__":

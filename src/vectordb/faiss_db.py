@@ -5,10 +5,11 @@ from llama_index.core import StorageContext, VectorStoreIndex, load_index_from_s
 from llama_index.core.node_parser import SentenceSplitter
 
 class FaissVectorDB(BaseVectorDB):
-    def __init__(self, embed_model):
+    def __init__(self, embed_model, path):
         self.embed_model = embed_model
         test_vec = self.embed_model.get_text_embedding("test")
         self.dim = len(test_vec)
+        self.path = path
         self.index = None 
         self.vector_store = None
         self.storage_context = None
@@ -32,11 +33,11 @@ class FaissVectorDB(BaseVectorDB):
         if self.index:
             self.index.storage_context.persist(path)
     
-    def load(self, path):
-        self.vector_store = FaissVectorStore.from_persist_dir(path)
+    def load(self):
+        self.vector_store = FaissVectorStore.from_persist_dir(self.path)
         self.storage_context = StorageContext.from_defaults(
             vector_store=self.vector_store, 
-            persist_dir=path
+            persist_dir=self.path
         )
         self.index = load_index_from_storage(
             storage_context=self.storage_context,

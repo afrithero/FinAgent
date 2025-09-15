@@ -4,7 +4,7 @@ This repository is about developing a Financial Agent Assistant, combining finan
 
 ## Features
 - **Vector Database (LlamaIndex + Faiss)**     
-  -Build a retrieval system for financial documents (e.g., earnings reports, analyst research, news). Currently experimenting with vector database construction using the FinDER dataset [1] to enable Retrieval-Augmented Generation (RAG) for financial QA.
+  Build a retrieval system for financial documents (e.g., earnings reports, analyst research, news). Currently experimenting with vector database construction using the FinDER dataset [1] to enable Retrieval-Augmented Generation (RAG) for financial QA.
 
 - **Search Engine API Integration** **(WIP)**         
   Get the latest market news and price updates.

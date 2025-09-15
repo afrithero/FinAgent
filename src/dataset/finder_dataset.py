@@ -4,7 +4,7 @@ from .base_dataset import BaseDataset
 
 class FinderDataset(BaseDataset):
     def __init__(self, split="train"):
-        self.split = split
+        super().__init__(split)
     
     def load(self):
         ds = load_dataset("Linq-AI-Research/FinDER")
