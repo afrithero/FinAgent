@@ -7,3 +7,6 @@ data/
 *.csv
 *.tsv
 *.json
+
+# Config
+.env

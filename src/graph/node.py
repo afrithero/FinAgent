@@ -1,7 +1,8 @@
-from .state import State
+from .tools import backtest_tool
+import json
 
 class RetrieverNode:
-    def __init__(self, retriever, top_k=3):
+    def __init__(self, retriever, top_k=1):
         self.retriever = retriever
         self.top_k = top_k
 
@@ -13,9 +14,32 @@ class RetrieverNode:
         
         return {
             "docs": selected_docs, 
-            "debug": {
-                "retriever_output": debug}
+            "debug": debug
             }
+
+class BacktestNode:
+    def __init__(self, csv_path, cash, fast, slow):
+        self.csv_path = csv_path
+        self.cash = cash
+        self.fast = fast
+        self.slow = slow
+    
+    def __call__(self, state):
+        result = backtest_tool.invoke({
+            "csv_path": self.csv_path,
+            "cash": self.cash,
+            "fast": self.fast,
+            "slow": self.slow
+        })
+
+        debug = state.get("debug", {}).copy()
+        debug["backtest_output"] = str(result)
+        
+        return {
+            "docs": state["docs"],
+            "backtest": result,
+            "debug": debug
+        }
 
 class LLMNode:
     def __init__(self, llm):
@@ -23,15 +47,17 @@ class LLMNode:
 
     def __call__(self, state):
         context = "\n".join(state["docs"])
+        backtest_result = ""
+        if "backtest" in state and state["backtest"]:
+            backtest_result = json.dumps(state["backtest"], indent=2)
         prompt = f"""
-        You are a financial assistant. 
-        Use the following context to answer the question. 
-        - Answer in your own words (do not copy text directly). 
-        - Provide a concise and clear explanation. 
-        - If numbers are involved, highlight them.
-        
+        You are a financial assistant. Please analyze the stock growth potential in the market.
+
         Context:
         {context}
+
+        Backtest Result:
+        {backtest_result}
 
         Question:
         {state["query"]}

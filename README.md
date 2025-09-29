@@ -1,6 +1,9 @@
-# Financial Agent Assistant
+# FinAgent - Financial AI Agent
 
-This repository is about developing a Financial Agent Assistant, combining financial data RAG, search engine, and Backtrader quantitative trading tools to generate investment recommendation reports.
+This repository is about developing a Financial AI Agent, combining financial data RAG, search engine, and Backtrader quantitative trading tools to generate investment analysis.
+
+![FinAgent Architecture](./FinAgent_architecture.png)
+
 
 ## Features
 - **Vector Database (LlamaIndex + Faiss)**     
@@ -9,11 +12,14 @@ This repository is about developing a Financial Agent Assistant, combining finan
 - **Search Engine API Integration** **(WIP)**         
   Get the latest market news and price updates.
 
-- **Quantitative Backtesting (Backtrader)** **(WIP)**   
-  Run trading strategies (e.g., moving averages, momentum) with historical data.
+- **Backtesting in Quantitative Trading (Backtrader)**        
+  Download historical stock market data from both the Taiwan and U.S. markets for specified time ranges. It allows users to run trading strategies such as Simple Moving Average (SMA) cross and momentum-based approaches, enabling backtesting and performance evaluation on real market data.
+
+- **LLM**        
+  Integrate open-source models from HuggingFace, Google’s Gemini models, and OpenAI’s GPT series.
 
 - **AI Agent (LangGraph)** **(WIP)**   
-  Intergrates tools (retriever, search, backtester, LLM) to generate comprehensive investment advises.
+  Intergrate tools (RAG, search, backtester, LLM) to generate comprehensive investment advises.
 
 
 ## Usage
@@ -42,6 +48,18 @@ This step will:
 - Load the persisted vector database
 - Use a retriever to perform semantic search
 - Return the most relevant answer snippets
+
+### Download stock market data
+```bash
+cd ./src
+python download_stock_data.py
+```
+
+### Run FinAgent
+```bash
+cd ./src
+python run_react_agent.py
+```
 
 ### Run tests
 ```bash
