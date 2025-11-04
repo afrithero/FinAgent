@@ -1,5 +1,6 @@
 from langchain_core.tools import tool
 from stock.trader import Backtester, SmaCross
+import httpx
 
 @tool(
     "backtest",
@@ -29,4 +30,32 @@ def create_retriever_tool(retriever):
     def retriever_tool(query: str):
         return retriever.retrieve(query)[:3] 
     return retriever_tool
+
+@tool(
+    "search_stock_info",
+    description=(
+        "Search for stock outlook, predictions, or market potential using the SerpAPI FastAPI endpoint."
+        "Returns summarized search results from Google."
+    ),
+)
+def search_stock_info(query: str, num_results: int = 3, hl: str = "en", gl: str = "us"):
+    BASE_URL = "http://localhost:8000" 
+    with httpx.Client(timeout=20.0) as client:
+        params = {
+            "query": query,
+            "num_results": num_results,
+            "hl": hl,
+            "gl": gl
+        }
+        resp = client.get(f"{BASE_URL}/search", params=params)
+        if resp.status_code != 200:
+            return f"Search failed: {resp.text}"
+        data = resp.json()
+        results = data.get("results", [])
+        if not results:
+            return "No search results found."
+        summary = "\n".join(
+            [f"- {r['title']}\n  {r['link']}" for r in results]
+        )
+        return f"Search results for '{query}':\n{summary}"
 

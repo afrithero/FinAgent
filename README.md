@@ -6,11 +6,11 @@ This repository is about developing a Financial AI Agent, combining financial da
 
 
 ## Features
-- **Vector Database (LlamaIndex + Faiss)**     
+- **Vector Database (LlamaIndex & Faiss)**     
   Build a retrieval system for financial documents (e.g., earnings reports, analyst research, news). Currently experimenting with vector database construction using the FinDER dataset [1] to enable Retrieval-Augmented Generation (RAG) for financial QA.
 
-- **Search Engine API Integration** **(WIP)**         
-  Get the latest market news and price updates.
+- **Search Engine API Integration** **(FastAPI & SerpAPI)**         
+  Get the latest market news.
 
 - **Backtesting in Quantitative Trading (Backtrader)**        
   Download historical stock market data from both the Taiwan and U.S. markets for specified time ranges. It allows users to run trading strategies such as Simple Moving Average (SMA) cross and momentum-based approaches, enabling backtesting and performance evaluation on real market data.
@@ -23,6 +23,11 @@ This repository is about developing a Financial AI Agent, combining financial da
 
 
 ## Usage
+
+### Run with Docker Compose
+```bash
+docker-compose up --build
+```
 
 ### Install dependencies
 ```bash

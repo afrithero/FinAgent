@@ -1,5 +1,4 @@
-from graph.tools import create_retriever_tool
-from graph.tools import backtest_tool
+from graph.tools import create_retriever_tool, backtest_tool, search_stock_info
 from embedder.embedder_factory import EmbedderFactory
 from vectordb.faiss_db import FaissVectorDB
 from retriever.financial_retriever import FinancialRetriver
@@ -25,20 +24,20 @@ if __name__ == "__main__":
         openai - e.g. gpt-4o-mini
     '''
     llm = LLMFactory.create_llm(
-        provider="huggingface",
-        model_name="mistralai/Mixtral-8x7B-Instruct-v0.1",
+        provider="google",
+        model_name="gemini-2.0-flash-exp",
         temperature=0
     )
 
     # Tool list
-    tools = [retriever_tool, backtest_tool]
+    tools = [retriever_tool, backtest_tool, search_stock_info]
 
     # Create ReAct agent
     prompt = (
         "You are a financial assistant.\n"
         "RULES:\n"
-        "1) If the question is about a stock's outlook/market potential, ALWAYS call tools before answering.\n"
-        "2) First call `retrieve_financial_docs` with the user's query.\n"
+        "1) If the question is about a stock's outlook or predictions, ALWAYS call search_stock_info.\n"
+        "2) Then call `retrieve_financial_docs` with the user's query.\n"
         "3) If the query mentions AAPL/Apple, then call `backtest` (use the default csv_path if not provided).\n"
         "4) Please give the paramters of backtesting analyze the result.\n"
         "5) After tool observations, synthesize a final, concise answer."
