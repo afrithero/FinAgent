@@ -15,7 +15,7 @@ services:
   agent:
     build:
       context: .
-      dockerfile: src/Dockerfile
+      dockerfile: agent/Dockerfile
     container_name: langgraph_agent
     depends_on:
       - mcp_server

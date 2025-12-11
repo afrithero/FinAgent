@@ -26,7 +26,7 @@ This repository is about developing a Financial AI Agent, combining financial da
 
 ### Run with Docker Compose
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 
 ### Install dependencies
@@ -35,7 +35,7 @@ pip install -r requirements.txt
 ```
 ### Build the vector database
 ```bash
-cd ./src
+cd ./agent
 python build_index.py
 ```
 This step will:
@@ -46,7 +46,7 @@ This step will:
 
 ### Query the vector database
 ```bash
-cd ./src
+cd ./agent
 python query_index.py
 ```
 This step will:
@@ -56,13 +56,13 @@ This step will:
 
 ### Download stock market data
 ```bash
-cd ./src
+cd ./agent
 python download_stock_data.py
 ```
 
 ### Run FinAgent
 ```bash
-cd ./src
+cd ./agent
 python run_react_agent.py
 ```
 

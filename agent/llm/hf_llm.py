@@ -1,5 +1,6 @@
 from .base_llm import BaseLLM
 from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
+from langchain_core.messages import HumanMessage
     
 class HFLLM(BaseLLM):
     def __init__(self, repo_id, temperature):
@@ -11,7 +12,6 @@ class HFLLM(BaseLLM):
         )
 
     def generate(self, prompt):
-        from langchain_core.messages import HumanMessage
         resp = self.chat_model.invoke([HumanMessage(content=prompt)])
         return resp.content
 

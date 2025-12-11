@@ -19,13 +19,13 @@ if __name__ == "__main__":
     # LLM
     '''
     Provider:
-        huggingface - e.g. mistralai/Mixtral-8x7B-Instruct-v0.1
+        huggingface - e.g. deepseek-ai/DeepSeek-R1-0528
         google - e.g. gemini-2.0-flash-exp
         openai - e.g. gpt-4o-mini
     '''
     llm = LLMFactory.create_llm(
-        provider="google",
-        model_name="gemini-2.0-flash-exp",
+        provider="huggingface",
+        model_name="deepseek-ai/DeepSeek-R1-0528",
         temperature=0
     )
 

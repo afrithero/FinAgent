@@ -39,7 +39,7 @@ def create_retriever_tool(retriever):
     ),
 )
 def search_stock_info(query: str, num_results: int = 3, hl: str = "en", gl: str = "us"):
-    BASE_URL = "http://localhost:8000" 
+    BASE_URL = "http://mcp_server:8000" 
     with httpx.Client(timeout=20.0) as client:
         params = {
             "query": query,
