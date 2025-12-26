@@ -1,4 +1,3 @@
-version: "3.9"
 services:
   mcp_server:
     build:
@@ -9,6 +8,8 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    volumes:
+      - ./mcp_server:/app
     networks:
       - finagent_net
 
@@ -21,6 +22,10 @@ services:
       - mcp_server
     env_file:
       - .env
+    volumes:
+      - ./agent:/app
+      - ./data:/data
+    command: sleep infinity
     networks:
       - finagent_net
 

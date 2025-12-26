@@ -17,4 +17,4 @@ COPY agent/ /app/agent/
 COPY .env /app/.env
 COPY data/ /app/data/
 
-CMD ["python3", "/app/agent/run_react_agent.py"]
+# CMD ["python3", "/app/agent/run_react_agent.py"]

@@ -60,10 +60,16 @@ cd ./agent
 python download_stock_data.py
 ```
 
-### Run FinAgent
+### Run FinAgent - ReAct
 ```bash
 cd ./agent
 python run_react_agent.py
+```
+
+### Run FinAgent - State Graph
+```bash
+cd ./agent
+python run_stategraph_agent.py
 ```
 
 ### Run tests

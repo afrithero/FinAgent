@@ -48,7 +48,7 @@ if __name__ == "__main__":
                                name = "financial_agent",
                                prompt = prompt)
 
-    query = "Does Apple stock (AAPL) have growth potential in the market?"
+    query = "Does Apple stock (AAPL) have growth potential in the market? Please backtest its historical performance and provide an analysis."
     response = agent.invoke({ "messages": [HumanMessage(content=query)] }) 
     print(f"Final Result: {response['messages'][-1].content} \n")
     print("Step by step execution")
