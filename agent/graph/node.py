@@ -1,6 +1,14 @@
 from .tools import backtest_tool
 import httpx
 import json
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+
+class LLMOutputSchema(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    verdict: str
+    recommendation: str
+    backtest_summary: str | None = None
 
 class RetrieverNode:
     def __init__(self, retriever, top_k=1):
@@ -47,13 +55,19 @@ class BacktestNode:
 class LLMNode:
     def __init__(self, llm):
         self.llm = llm
-        # Default system prompt / response format enforcement
+        # Default system prompt / response format
         self.system_prompt = (
             "You are a financial assistant. Respond in JSON with the following keys:\n"
-            "- verdict: short conclusion about growth potential\n"
-            "- confidence: float 0.0-1.0 representing confidence level\n"
-            "- recommendation: concise next actions or explanation\n"
-            "- backtest_summary: optional summary of backtest results (if provided)\n"
+            "- verdict: string, short conclusion about growth potential\n"
+            "- recommendation: string, concise next actions or explanation\n"
+            "- backtest_summary: string or null, optional summary of backtest results\n"
+            "Return ONLY valid JSON. Do not include extra keys.\n"
+            "Example:\n"
+            "{\n"
+            "  \"verdict\": \"Moderate growth potential.\",\n"
+            "  \"recommendation\": \"Consider small allocation and monitor earnings.\",\n"
+            "  \"backtest_summary\": null\n"
+            "}\n"
         )
 
     def __call__(self, state):
@@ -80,13 +94,29 @@ class LLMNode:
         debug["llm_input"] = prompt
         debug["llm_output_raw"] = answer
 
-        # try to parse JSON, but fall back to raw string if parsing fails
+        # try to parse JSON, then validate schema; if it fails, retry once with correction
         parsed = None
         try:
             parsed = json.loads(answer)
-            debug["llm_output_parsed"] = parsed
-        except Exception as e:
+            validated = LLMOutputSchema.model_validate(parsed)
+            debug["llm_output_parsed"] = validated.model_dump()
+            parsed = validated.model_dump()
+        except (json.JSONDecodeError, ValidationError, TypeError, ValueError) as e:
             debug["llm_output_error"] = str(e)
+            repair_prompt = (
+                "Your previous response did not match the required JSON schema.\n"
+                f"Error: {str(e)}\n"
+                "Return ONLY valid JSON that matches the schema in the system prompt."
+            )
+            repair_answer = self.llm.generate(repair_prompt).strip()
+            debug["llm_output_raw_repair"] = repair_answer
+            try:
+                parsed = json.loads(repair_answer)
+                validated = LLMOutputSchema.model_validate(parsed)
+                debug["llm_output_parsed"] = validated.model_dump()
+                parsed = validated.model_dump()
+            except (json.JSONDecodeError, ValidationError, TypeError, ValueError) as e2:
+                debug["llm_output_error_repair"] = str(e2)
 
         return {
             "answer": parsed if parsed is not None else answer,
