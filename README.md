@@ -31,7 +31,8 @@ docker compose up --build
 
 ### Install dependencies
 ```bash
-pip install -r requirements.txt
+pip install -r agent/requirements.txt
+pip install -r mcp_server/requirements.txt
 ```
 ### Build the vector database
 ```bash
@@ -72,10 +73,10 @@ cd ./agent
 python run_stategraph_agent.py
 ```
 
-### Run tests
+### Run tests (inside langgraph_agent container)
 ```bash
-cd ./tests
-pytest -q
+docker exec langgraph_agent pytest -q -o "pythonpath=."                    # all tests
+docker exec langgraph_agent pytest -q -o "pythonpath=." tests/test_dataset.py::TestFinderDataset::test_schema_columns  # single test
 ```
 
 ## References

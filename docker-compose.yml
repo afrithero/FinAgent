@@ -20,11 +20,15 @@ services:
     container_name: langgraph_agent
     depends_on:
       - mcp_server
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     env_file:
       - .env
     volumes:
       - ./agent:/app
       - ./data:/data
+      - ./tests:/app/tests
     command: sleep infinity
     networks:
       - finagent_net

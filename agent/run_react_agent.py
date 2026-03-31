@@ -5,6 +5,13 @@ from retriever.financial_retriever import FinancialRetriver
 from llm.llm_factory import LLMFactory
 from langgraph.prebuilt import create_react_agent
 from langchain_core.messages import HumanMessage
+from utils.trace_utils import (
+    print_stage,
+    print_react_event,
+    validate_tool_result,
+    format_tool_result_summary,
+    print_contract_check,
+)
 
 if __name__ == "__main__":
     embedder = EmbedderFactory.create_embedder(
@@ -49,8 +56,43 @@ if __name__ == "__main__":
                                prompt = prompt)
 
     query = "Does Apple stock (AAPL) have growth potential in the market? Please backtest its historical performance and provide an analysis."
-    response = agent.invoke({ "messages": [HumanMessage(content=query)] }) 
-    print(f"Final Result: {response['messages'][-1].content} \n")
-    print("Step by step execution")
-    for message in response['messages']:
-        print(message.pretty_repr())
+    
+    print("=" * 60)
+    print("ReAct Agent Execution Trace")
+    print("=" * 60)
+    print_stage("agent", "start", query=query[:50] + "..." if len(query) > 50 else query)
+    print()
+    
+    # Use streaming for runtime visibility
+    tool_count = 0
+    final_answer = None
+    
+    for event in agent.stream({"messages": [HumanMessage(content=query)]}):
+        print_react_event(event)
+        
+        # Track tool invocations
+        if "tools" in event:
+            tool_count += 1
+            
+        # Capture final answer when available (only if no tool calls - i.e., actual final response)
+        if "agent" in event:
+            msgs = event.get("agent", {}).get("messages", [])
+            if msgs:
+                last_msg = msgs[-1]
+                msg_type = type(last_msg).__name__
+                # Only capture as final when NOT having tool calls - avoids capturing reasoning
+                has_tool_calls = getattr(last_msg, "tool_calls", None) or (
+                    hasattr(last_msg, "additional_kwargs") and last_msg.additional_kwargs.get("tool_calls")
+                )
+                if (msg_type == "AIMessage" or (hasattr(last_msg, "type") and last_msg.type == "ai")) and not has_tool_calls:
+                    final_answer = getattr(last_msg, "content", str(last_msg))
+    
+    print()
+    print_stage("agent", "complete")
+    print(f"   Total tool invocations: {tool_count}")
+    
+    print()
+    print("=" * 60)
+    print("Final Answer")
+    print("=" * 60)
+    print(final_answer if final_answer else "(No final answer captured)")

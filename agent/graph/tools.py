@@ -2,6 +2,10 @@ from langchain_core.tools import tool
 from stock.trader import Backtester, SmaCross
 import httpx
 
+# Re-export ToolResult so tools.py callers can import it from here.
+from graph.state import ToolResult
+
+
 @tool(
     "backtest",
     description=(
@@ -10,14 +14,29 @@ import httpx
     ),
 )
 def backtest_tool(
-    csv_path: str = "../data/us_stock/AAPL.csv", 
+    csv_path: str = "../data/us_stock/AAPL.csv",
     cash: float = 50000,
     fast: int = 3,
     slow: int = 37,
 ):
-    bt_runner = Backtester(csv_path, strategy=SmaCross, cash=cash, fast=fast, slow=slow)
-    bt_runner.run()
-    return {"performance": bt_runner.get_performance(), "trades": bt_runner.get_trades()}
+    try:
+        bt_runner = Backtester(csv_path, strategy=SmaCross, cash=cash, fast=fast, slow=slow)
+        bt_runner.run()
+        return bt_runner.to_tool_result()
+    except FileNotFoundError as exc:
+        return ToolResult(
+            status="error",
+            summary=f"Backtest failed: CSV not found at {csv_path}",
+            data=None,
+            debug_hint=str(exc),
+        ).model_dump()
+    except Exception as exc:
+        return ToolResult(
+            status="error",
+            summary=f"Backtest error: {exc}",
+            data=None,
+            debug_hint=str(exc),
+        ).model_dump()
 
 def create_retriever_tool(retriever):
     @tool(
@@ -28,7 +47,21 @@ def create_retriever_tool(retriever):
         ),
     )
     def retriever_tool(query: str):
-        return retriever.retrieve(query)[:3] 
+        docs = retriever.retrieve(query)[:3]
+        if not docs:
+            return ToolResult(
+                status="empty",
+                summary="No financial documents retrieved for this query.",
+                data=None,
+                debug_hint=None,
+            ).model_dump()
+        excerpt = ";  ".join(docs)
+        return ToolResult(
+            status="ok",
+            summary=excerpt,
+            data=docs,
+            debug_hint=None,
+        ).model_dump()
     return retriever_tool
 
 @tool(
@@ -39,23 +72,53 @@ def create_retriever_tool(retriever):
     ),
 )
 def search_stock_info(query: str, num_results: int = 3, hl: str = "en", gl: str = "us"):
-    BASE_URL = "http://mcp_server:8000" 
-    with httpx.Client(timeout=20.0) as client:
-        params = {
-            "query": query,
-            "num_results": num_results,
-            "hl": hl,
-            "gl": gl
-        }
-        resp = client.get(f"{BASE_URL}/search", params=params)
-        if resp.status_code != 200:
-            return f"Search failed: {resp.text}"
-        data = resp.json()
-        results = data.get("results", [])
-        if not results:
-            return "No search results found."
-        summary = "\n".join(
-            [f"- {r['title']}\n  {r['link']}" for r in results]
-        )
-        return f"Search results for '{query}':\n{summary}"
+    BASE_URL = "http://mcp_server:8000"
+    try:
+        with httpx.Client(timeout=20.0) as client:
+            params = {
+                "query": query,
+                "num_results": num_results,
+                "hl": hl,
+                "gl": gl,
+            }
+            resp = client.get(f"{BASE_URL}/search", params=params)
+            if resp.status_code != 200:
+                return ToolResult(
+                    status="error",
+                    summary=f"Search failed: HTTP {resp.status_code}",
+                    data=None,
+                    debug_hint=resp.text[:200],
+                ).model_dump()
+            data = resp.json()
+            results = data.get("results", [])
+            if not results:
+                return ToolResult(
+                    status="empty",
+                    summary="No search results found for this query.",
+                    data=None,
+                    debug_hint=None,
+                ).model_dump()
+            summary_text = "\n".join(
+                [f"- {r['title']}  ({r['link']})" for r in results]
+            )
+            return ToolResult(
+                status="ok",
+                summary=summary_text,
+                data=results,
+                debug_hint=None,
+            ).model_dump()
+    except httpx.TimeoutException as exc:
+        return ToolResult(
+            status="error",
+            summary="Search timed out after 20 seconds.",
+            data=None,
+            debug_hint=str(exc),
+        ).model_dump()
+    except Exception as exc:
+        return ToolResult(
+            status="error",
+            summary=f"Search error: {exc}",
+            data=None,
+            debug_hint=str(exc),
+        ).model_dump()
 

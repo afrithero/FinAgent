@@ -1,6 +1,6 @@
 from .tools import backtest_tool
+from .state import ToolResult
 import httpx
-import json
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 
@@ -9,6 +9,7 @@ class LLMOutputSchema(BaseModel):
     verdict: str
     recommendation: str
     backtest_summary: str | None = None
+
 
 class RetrieverNode:
     def __init__(self, retriever, top_k=1):
@@ -52,74 +53,106 @@ class BacktestNode:
             "debug": debug
         }
 
+def _derive_verdict(raw_text: str) -> str:
+    """Derive verdict deterministically from raw LLM text.
+    
+    Returns first non-empty line trimmed to reasonable length.
+    Falls back to safe default if no valid content found.
+    """
+    if not raw_text:
+        return "No response from LLM"
+    
+    lines = [line.strip() for line in raw_text.strip().split("\n") if line.strip()]
+    
+    if not lines:
+        return "Empty response from LLM"
+    
+    first_line = lines[0]
+    
+    # Return first non-empty line, truncated
+    return first_line[:200] if len(first_line) > 200 else first_line
+
+
 class LLMNode:
     def __init__(self, llm):
         self.llm = llm
         # Default system prompt / response format
         self.system_prompt = (
-            "You are a financial assistant. Respond in JSON with the following keys:\n"
-            "- verdict: string, short conclusion about growth potential\n"
-            "- recommendation: string, concise next actions or explanation\n"
-            "- backtest_summary: string or null, optional summary of backtest results\n"
-            "Return ONLY valid JSON. Do not include extra keys.\n"
-            "Example:\n"
-            "{\n"
-            "  \"verdict\": \"Moderate growth potential.\",\n"
-            "  \"recommendation\": \"Consider small allocation and monitor earnings.\",\n"
-            "  \"backtest_summary\": null\n"
-            "}\n"
+            "You are a financial assistant. Provide a concise plain-text analysis.\n"
+            "Include your verdict (short conclusion about growth potential) and "
+            "recommendation (concise next actions or explanation).\n"
+            "If backtest results are provided, summarize them briefly.\n"
+            "Output plain text, not JSON.\n"
         )
 
     def __call__(self, state):
-        context = "\n".join(state["docs"])
-        backtest_result = ""
-        if "backtest" in state and state["backtest"]:
-            backtest_result = json.dumps(state["backtest"], indent=2)
-        search_result = ""
-        if state.get("search_results"):
-            search_result = str(state["search_results"])
-        # assemble prompt with system guidance asking for JSON output
+        docs = state.get("docs", [])
+        doc_context = (
+            f"[{len(docs)} document(s) retrieved — see RetrieverNode debug for full text]"
+            if docs
+            else "[No documents retrieved]"
+        )
+        # Backtest: read only .summary from ToolResult; stay silent for legacy shapes.
+        backtest_summary = ""
+        backtest_data = state.get("backtest")
+        if backtest_data is not None and isinstance(backtest_data, dict):
+            backtest_summary = backtest_data.get("summary", "")
+        # Search: same safe pattern.
+        search_summary = ""
+        search_data = state.get("search_results")
+        if search_data is not None and isinstance(search_data, dict):
+            search_summary = search_data.get("summary", "")
+        # Assemble prompt — LLMNode reads only summary fields; no raw doc or data payloads.
         prompt = (
             self.system_prompt + "\n"
-            "Context:\n" + context + "\n\n"
-            "Search Result:\n" + search_result + "\n\n"
-            "Backtest Result:\n" + backtest_result + "\n\n"
+            "Context:\n" + doc_context + "\n\n"
+            "Search Result:\n" + search_summary + "\n\n"
+            "Backtest Result:\n" + backtest_summary + "\n\n"
             "Question:\n" + state["query"] + "\n\n"
-            "Please produce only valid JSON matching the schema above."
+            "Please provide your analysis in plain text."
         )
 
+        # Treat LLM output as raw string - no JSON parsing
         raw_answer = self.llm.generate(prompt)
-        answer = raw_answer.strip()
+        raw_text = raw_answer.strip() if raw_answer else ""
+        
         debug = state.get("debug", {}).copy()
         debug["llm_input"] = prompt
-        debug["llm_output_raw"] = answer
+        debug["llm_output_raw"] = raw_text
 
-        # try to parse JSON, then validate schema; if it fails, retry once with correction
-        parsed = None
+        # Build deterministic custom JSON structure from raw text
+        # verdict: short deterministic summary derived from raw text
+        verdict = _derive_verdict(raw_text)
+        
+        # recommendation: full raw text (trimmed)
+        recommendation = raw_text[:5000] if raw_text else "Empty response from LLM"
+        
+        # backtest_summary: from ToolResult summary when available
+        bt_summary: str | None = backtest_summary if backtest_summary else None
+
+        answer = {
+            "verdict": verdict,
+            "recommendation": recommendation,
+            "backtest_summary": bt_summary,
+        }
+        
+        # Validate the answer dict matches schema
         try:
-            parsed = json.loads(answer)
-            validated = LLMOutputSchema.model_validate(parsed)
+            validated = LLMOutputSchema.model_validate(answer)
             debug["llm_output_parsed"] = validated.model_dump()
-            parsed = validated.model_dump()
-        except (json.JSONDecodeError, ValidationError, TypeError, ValueError) as e:
-            debug["llm_output_error"] = str(e)
-            repair_prompt = (
-                "Your previous response did not match the required JSON schema.\n"
-                f"Error: {str(e)}\n"
-                "Return ONLY valid JSON that matches the schema in the system prompt."
-            )
-            repair_answer = self.llm.generate(repair_prompt).strip()
-            debug["llm_output_raw_repair"] = repair_answer
-            try:
-                parsed = json.loads(repair_answer)
-                validated = LLMOutputSchema.model_validate(parsed)
-                debug["llm_output_parsed"] = validated.model_dump()
-                parsed = validated.model_dump()
-            except (json.JSONDecodeError, ValidationError, TypeError, ValueError) as e2:
-                debug["llm_output_error_repair"] = str(e2)
+            answer = validated.model_dump()
+        except ValidationError as e:
+            # This should never happen since we build it deterministically
+            debug["llm_output_validation_error"] = str(e)
+            # Fallback to ensure schema compliance
+            answer = {
+                "verdict": "LLM output construction failed",
+                "recommendation": recommendation,
+                "backtest_summary": bt_summary,
+            }
 
         return {
-            "answer": parsed if parsed is not None else answer,
+            "answer": answer,
             "debug": debug
         }
 
@@ -142,20 +175,39 @@ class SearchNode:
             }
             resp = client.get(f"{self.base_url}/search", params=params)
             if resp.status_code != 200:
-                results = f"Search failed: {resp.text}"
-            else:
-                data = resp.json()
-                items = data.get("results", [])
-                if not items:
-                    results = "No search results found."
-                else:
-                    summary = "\n".join(
-                        [f"- {r['title']}\n  {r['link']}" for r in items]
-                    )
-                    results = f"Search results for '{query}':\n{summary}"
+                result = ToolResult(
+                    status="error",
+                    summary=f"Search failed: HTTP {resp.status_code}",
+                    data=None,
+                    debug_hint=resp.text[:200],
+                ).model_dump()
+                debug = state.get("debug", {}).copy()
+                debug["search_output"] = result["summary"]
+                return {"search_results": result, "debug": debug}
+            data = resp.json()
+            items = data.get("results", [])
+            if not items:
+                result = ToolResult(
+                    status="empty",
+                    summary="No search results found for this query.",
+                    data=None,
+                    debug_hint=None,
+                ).model_dump()
+                debug = state.get("debug", {}).copy()
+                debug["search_output"] = result["summary"]
+                return {"search_results": result, "debug": debug}
+            summary_text = "\n".join(
+                [f"- {r['title']}  ({r['link']})" for r in items]
+            )
+            result = ToolResult(
+                status="ok",
+                summary=summary_text,
+                data=items,
+                debug_hint=None,
+            ).model_dump()
         debug = state.get("debug", {}).copy()
-        debug["search_output"] = str(results)
+        debug["search_output"] = summary_text
         return {
-            "search_results": results,
+            "search_results": result,
             "debug": debug
         }

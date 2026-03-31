@@ -1,5 +1,6 @@
 import backtrader as bt
 import pandas as pd
+from typing import Any
 
 class SmaCross(bt.Strategy):
     params = (("fast",5), ("slow", 20),)
@@ -51,7 +52,6 @@ class Backtester:
         cerebro = bt.Cerebro()
         cerebro.adddata(data)
 
-        # 用傳進來的 strategy
         cerebro.addstrategy(self.strategy, **self.kwargs)
 
         cerebro.broker.setcash(self.cash)
@@ -83,3 +83,23 @@ class Backtester:
         if self.strat is None:
             raise RuntimeError("Must run() before getting trades.")
         return getattr(self.strat, "trade_log", [])
+
+    def to_tool_result(self) -> dict[str, Any]:
+        """Return a ToolResult-conformant dict for use by backtest_tool."""
+        perf = self.get_performance()
+        trades = self.get_trades()
+        final_cash = perf["final_cash"]
+        initial_cash = perf["initial_cash"]
+        ret_pct = perf["return_pct"]
+        sharpe = perf["sharpe_ratio"]
+        summary = (
+            f"Backtest complete. "
+            f"Initial={initial_cash:.2f}  Final={final_cash:.2f}  "
+            f"Return={ret_pct:.2%}  Sharpe={sharpe}  Trades={len(trades)}"
+        )
+        return {
+            "status": "ok",
+            "summary": summary,
+            "data": {"performance": perf, "trades": trades},
+            "debug_hint": None,
+        }
