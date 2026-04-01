@@ -32,17 +32,36 @@ class SmaCross(bt.Strategy):
             })
 
 class Backtester:
-    def __init__(self, csv_path: str, strategy, cash: float = 10000, **kwargs):
+    def __init__(
+        self,
+        csv_path: str | None,
+        strategy,
+        cash: float = 10000,
+        data_df: pd.DataFrame | None = None,
+        **kwargs,
+    ):
         self.csv_path = csv_path
         self.strategy = strategy
         self.cash = cash
+        self.data_df = data_df
         self.kwargs = kwargs
         self.results = None
         self.strat = None
         self.cerebro = None
 
     def run(self):
-        df = pd.read_csv(self.csv_path, parse_dates=True, index_col="Date")
+        if self.data_df is not None:
+            df = self.data_df.copy()
+            if "Date" in df.columns:
+                df["Date"] = pd.to_datetime(df["Date"])
+                df = df.set_index("Date")
+            else:
+                df.index = pd.to_datetime(df.index)
+            df.index.name = "Date"
+        else:
+            if not self.csv_path:
+                raise ValueError("Either csv_path or data_df must be provided.")
+            df = pd.read_csv(self.csv_path, parse_dates=True, index_col="Date")
         data = bt.feeds.PandasData(dataname=df,
                                    open='Open',
                                    high='High',
@@ -92,10 +111,11 @@ class Backtester:
         initial_cash = perf["initial_cash"]
         ret_pct = perf["return_pct"]
         sharpe = perf["sharpe_ratio"]
+        ret_text = f"{ret_pct:.2%}" if isinstance(ret_pct, (int, float)) else "N/A"
         summary = (
             f"Backtest complete. "
             f"Initial={initial_cash:.2f}  Final={final_cash:.2f}  "
-            f"Return={ret_pct:.2%}  Sharpe={sharpe}  Trades={len(trades)}"
+            f"Return={ret_text}  Sharpe={sharpe}  Trades={len(trades)}"
         )
         return {
             "status": "ok",

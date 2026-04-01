@@ -21,5 +21,5 @@ langchain-google-genai==2.1.12
 tqdm==4.67.1
 backtrader==1.9.78.123
 yfinance==0.2.66
-twstock==1.4.0
+twstock==1.4.4
 lxml==6.0.2

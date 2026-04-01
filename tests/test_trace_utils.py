@@ -6,7 +6,7 @@ These tests use synthetic stream chunks/payloads to verify:
 - Event formatting helpers
 """
 import pytest
-from agent.utils.trace_utils import (
+from utils.trace_utils import (
     validate_tool_result,
     validate_llm_output,
     format_tool_result_summary,

@@ -1,6 +1,8 @@
 from langchain_core.tools import tool
 from stock.trader import Backtester, SmaCross
+from stock.stock_loader import resolve_stock_data
 import httpx
+import pandas as pd
 
 # Re-export ToolResult so tools.py callers can import it from here.
 from graph.state import ToolResult
@@ -9,20 +11,56 @@ from graph.state import ToolResult
 @tool(
     "backtest",
     description=(
-        "Run SMA cross backtest on stock data. "
-        "If the user asks about AAPL, use csv_path='../data/us_stock/AAPL.csv' by default."
+        "Run SMA cross backtest on stock data with deterministic data resolution "
+        "(cache -> csv -> live fetch for US). "
+        "Supports forcing a fresh download via download_stock_data=true."
     ),
 )
 def backtest_tool(
+    ticker: str = "AAPL",
+    market: str = "us",
+    start_date: str = "2024-01-01",
+    end_date: str | None = None,
     csv_path: str = "../data/us_stock/AAPL.csv",
     cash: float = 50000,
     fast: int = 3,
     slow: int = 37,
+    download_stock_data: bool = False,
 ):
     try:
-        bt_runner = Backtester(csv_path, strategy=SmaCross, cash=cash, fast=fast, slow=slow)
+        if not end_date:
+            end_date = pd.Timestamp.today().strftime("%Y-%m-%d")
+
+        resolved = resolve_stock_data(
+            ticker=ticker,
+            market=market,
+            start_date=start_date,
+            end_date=end_date,
+            csv_path=csv_path,
+            download_stock_data=download_stock_data,
+        )
+        bt_runner = Backtester(
+            csv_path=resolved.get("csv_path") or csv_path,
+            data_df=resolved["df"],
+            strategy=SmaCross,
+            cash=cash,
+            fast=fast,
+            slow=slow,
+        )
         bt_runner.run()
-        return bt_runner.to_tool_result()
+        result = bt_runner.to_tool_result()
+        result["summary"] = (
+            f"{result['summary']} | Data source: {resolved['source']} "
+            f"({ticker.upper()} {start_date} to {end_date})"
+        )
+        return result
+    except NotImplementedError as exc:
+        return ToolResult(
+            status="error",
+            summary=f"Backtest failed: {exc}",
+            data=None,
+            debug_hint=str(exc),
+        ).model_dump()
     except FileNotFoundError as exc:
         return ToolResult(
             status="error",
@@ -121,4 +159,3 @@ def search_stock_info(query: str, num_results: int = 3, hl: str = "en", gl: str 
             data=None,
             debug_hint=str(exc),
         ).model_dump()
-

@@ -28,7 +28,7 @@ services:
     volumes:
       - ./agent:/app
       - ./data:/data
-      - ./tests:/app/tests
+      - ./tests:/tests
     command: sleep infinity
     networks:
       - finagent_net

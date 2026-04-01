@@ -28,22 +28,43 @@ class RetrieverNode:
             }
 
 class BacktestNode:
-    def __init__(self, csv_path, cash, fast, slow):
+    def __init__(
+        self,
+        csv_path,
+        cash,
+        fast,
+        slow,
+        start_date="2024-01-01",
+        end_date=None,
+        download_stock_data=False,
+    ):
         self.csv_path = csv_path
         self.cash = cash
         self.fast = fast
         self.slow = slow
+        self.start_date = start_date
+        self.end_date = end_date
+        self.download_stock_data = download_stock_data
     
     def __call__(self, state):
+        ticker = state.get("ticker", "AAPL")
+        market = state.get("market", "tw" if str(ticker).isdigit() else "us")
         csv_path = state.get("csv_path", self.csv_path)
         result = backtest_tool.invoke({
+            "ticker": ticker,
+            "market": market,
+            "start_date": state.get("start_date", self.start_date),
+            "end_date": state.get("end_date", self.end_date),
             "csv_path": csv_path,
             "cash": self.cash,
             "fast": self.fast,
-            "slow": self.slow
+            "slow": self.slow,
+            "download_stock_data": state.get("download_stock_data", self.download_stock_data),
         })
 
         debug = state.get("debug", {}).copy()
+        debug["backtest_ticker"] = ticker
+        debug["backtest_market"] = market
         debug["backtest_csv_path"] = csv_path
         debug["backtest_output"] = str(result)
         
