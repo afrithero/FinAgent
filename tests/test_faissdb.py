@@ -23,7 +23,6 @@ class TestFaissDB:
         db2 = FaissVectorDB(embed_model=embedder, path=str(tmp_dir))
         db2.load()
         results = db2.query("hello", top_k=1)
-        print(results)
         assert len(results) == 1
         assert any("hello" in str(r) for r in results)
     

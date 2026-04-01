@@ -22,17 +22,17 @@ docker exec langgraph_agent bash   # shell into agent container
 pytest -q
 
 # Inside container
-docker exec langgraph_agent pytest -q -o "pythonpath=."
+docker exec langgraph_agent pytest -q
 
 # Single test
-docker exec langgraph_agent pytest -q -o "pythonpath=." tests/test_dataset.py::TestFinderDataset::test_schema_columns
+docker exec langgraph_agent pytest -q tests/test_dataset.py::TestFinderDataset::test_schema_columns
 ```
 
-`pytest.ini` sets `pythonpath = agent`, so all imports in `agent/` are importable without the `agent.` prefix in tests.
+`pytest.ini` sets `pythonpath = .` and `testpaths = /tests`, so `-o "pythonpath=."` is no longer needed.
 
 ### Build vector index
 ```bash
-cd ./agent && python build_index.py    # builds Faiss index, persists to ../data/FinDER/
+cd ./agent && python scripts/build_index.py    # builds Faiss index, persists to ../data/FinDER/
 ```
 
 ### Run agents

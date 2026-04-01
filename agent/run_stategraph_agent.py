@@ -81,7 +81,7 @@ if __name__ == "__main__":
     agent = graph.compile()
     
     # query = "I have already based on stock price data Apple stock (AAPL) of since January 2023 and used an SMA cross strategy for backtesting. Does Apple stock (AAPL) have growth potential in the market?"
-    query = "請分析聯發科（2454）的投資前景，並針對近期市場動態提供建議。請同時對 2454 股票從 2023 年 1 月起進行簡單移動平均線交叉策略的回測，並在回答中摘要回測結果。"
+    query = "請分析群創（3481）的投資前景，並針對近期市場動態提供建議。請同時對 3481 股票從 2025 年 12 月起進行簡單移動平均線交叉策略的回測，並在回答中摘要回測結果。"
     print("=" * 60)
     print("StateGraph Execution Trace")
     print("=" * 60)

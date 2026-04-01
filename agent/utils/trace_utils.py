@@ -9,6 +9,14 @@ This module provides minimal, pure helper functions to:
 from typing import Any, TypedDict
 
 
+# Extra keys that LLMNode may add to the answer dict for internal debugging.
+# validate_llm_output permits these in addition to the required schema keys.
+_ALLOWED_LLM_DEBUG_KEYS: frozenset[str] = frozenset({
+    "debug", "llm_input", "llm_output_raw", "llm_output_error",
+    "llm_output_parsed", "llm_output_raw_repair", "llm_output_error_repair",
+})
+
+
 class ValidationResult(TypedDict):
     """Result of a contract validation check."""
     valid: bool
@@ -76,9 +84,7 @@ def validate_llm_output(data: Any | None) -> ValidationResult:
     if missing:
         return {"valid": False, "message": f"LLMOutputSchema missing keys: {missing}"}
     
-    extra = actual_keys - required_keys - {"debug", "llm_input", "llm_output_raw", "llm_output_error", 
-                                                "llm_output_parsed", "llm_output_raw_repair", 
-                                                "llm_output_error_repair"}
+    extra = actual_keys - required_keys - _ALLOWED_LLM_DEBUG_KEYS
     if extra:
         return {"valid": False, "message": f"LLMOutputSchema has extra keys: {extra}"}
     

@@ -25,6 +25,8 @@ services:
       - 1.1.1.1
     env_file:
       - .env
+    environment:
+      - MCP_SERVER_URL=http://mcp_server:8000
     volumes:
       - ./agent:/app
       - ./data:/data

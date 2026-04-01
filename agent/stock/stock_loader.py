@@ -1,6 +1,9 @@
 import concurrent.futures
+import logging
 import os
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 from datetime import timedelta
 from typing import Any
 
@@ -135,8 +138,20 @@ def _fetch_us_live_data(ticker: str, start_date: Any, end_date: Any) -> pd.DataF
 
 
 def _fetch_tw_live_data(ticker: str, start_date: Any, end_date: Any) -> pd.DataFrame:
+    # yfinance supports TWSE tickers via the ".TW" suffix and is more reliable
+    # than twstock, which scrapes TWSE directly and can fail on malformed rows.
+    if yf is not None:
+        try:
+            return _fetch_us_live_data(f"{ticker}.TW", start_date, end_date)
+        except Exception as e:
+            logger.warning(
+                "yfinance fetch failed for %s.TW (%s); falling back to twstock.", ticker, e
+            )
+
     if Stock is None:
-        raise ModuleNotFoundError("twstock is required for Taiwan live data fetch.")
+        raise ModuleNotFoundError(
+            "Neither yfinance nor twstock is available for Taiwan live data fetch."
+        )
 
     start = _to_timestamp(start_date)
     end = _to_timestamp(end_date)
@@ -193,6 +208,7 @@ def resolve_stock_data(
         return {"df": live, "source": "live+csv_download", "csv_path": csv_path}
     return {"df": live, "source": "live", "csv_path": csv_path}
 
+
 class StockLoader:
     def __init__(self, stocks, market, start_date, save_dir):
         self.stocks = stocks # e.g. ["2330"]
@@ -201,8 +217,8 @@ class StockLoader:
         self.save_dir = save_dir
         os.makedirs(self.save_dir, exist_ok=True)
 
-    def save_one_stock_to_csv(self, stock_id):
-        print(f"Processing on: {stock_id}")
+    def save_one_stock_to_csv(self, stock_id: str) -> None:
+        logger.info("Processing: %s", stock_id)
         try:
             if self.market == "us":
                 if yf is None:
@@ -210,7 +226,6 @@ class StockLoader:
                 start = f"{self.start_date[0]:04d}-{self.start_date[1]:02d}-01"
                 df = yf.download(stock_id, start=start, progress=False)
                 df = _normalize_ohlcv_df(df).reset_index()
-            
             elif self.market == "tw":
                 if Stock is None:
                     raise ModuleNotFoundError("twstock is required for Taiwan market download.")
@@ -220,13 +235,12 @@ class StockLoader:
                 df = _normalize_ohlcv_df(pd.DataFrame(data_dicts)).reset_index()
             else:
                 raise ValueError("Currently only supports 'tw' or 'us' market.")
-            
+
             filepath = os.path.join(self.save_dir, f"{stock_id}.csv")
             df.to_csv(filepath, index=False)
-            print(f"Saved on: {filepath}")
-        
-        except Exception as e:
-            print(f"Error processing {stock_id}: {e}")
+            logger.info("Saved: %s", filepath)
+        except (ValueError, OSError, ModuleNotFoundError) as e:
+            logger.error("Error processing %s: %s", stock_id, e, exc_info=True)
     
     def run(self):
         with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
@@ -239,6 +253,6 @@ class StockLoader:
                 try:
                     future.result()
                 except Exception as e:
-                    print(f"Error fetching data for {e}")
+                    logger.error("Unexpected error in worker thread: %s", e, exc_info=True)
 
-        print("Finished all runs.")
+        logger.info("Finished all runs.")

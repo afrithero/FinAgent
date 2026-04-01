@@ -20,8 +20,8 @@ class ToolResult(BaseModel):
 class State(TypedDict):
     query: str
     docs: List[str]
-    backtest: ToolResult
-    answer: str
+    backtest: Optional[Dict[str, Any]]
+    answer: Optional[Dict[str, Any]]
     run_backtest: Optional[bool]
     run_search: Optional[bool]
     ticker: Optional[str]
@@ -30,5 +30,5 @@ class State(TypedDict):
     end_date: Optional[str]
     download_stock_data: Optional[bool]
     csv_path: Optional[str]
-    search_results: Optional[ToolResult]
-    debug: Dict[str, str] 
+    search_results: Optional[Dict[str, Any]]
+    debug: Dict[str, Any]

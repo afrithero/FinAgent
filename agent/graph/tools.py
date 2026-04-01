@@ -1,11 +1,16 @@
+import logging
+
 from langchain_core.tools import tool
 from stock.trader import Backtester, SmaCross
 from stock.stock_loader import resolve_stock_data
 import httpx
 import pandas as pd
 
+from graph.config import MCP_SERVER_URL
 # Re-export ToolResult so tools.py callers can import it from here.
 from graph.state import ToolResult
+
+logger = logging.getLogger(__name__)
 
 
 @tool(
@@ -48,11 +53,14 @@ def backtest_tool(
             slow=slow,
         )
         bt_runner.run()
-        result = bt_runner.to_tool_result()
-        result["summary"] = (
-            f"{result['summary']} | Data source: {resolved['source']} "
-            f"({ticker.upper()} {start_date} to {end_date})"
-        )
+        base = bt_runner.to_tool_result()
+        result = {
+            **base,
+            "summary": (
+                f"{base['summary']} | Data source: {resolved['source']} "
+                f"({ticker.upper()} {start_date} to {end_date})"
+            ),
+        }
         return result
     except NotImplementedError as exc:
         return ToolResult(
@@ -68,7 +76,15 @@ def backtest_tool(
             data=None,
             debug_hint=str(exc),
         ).model_dump()
+    except ValueError as exc:
+        return ToolResult(
+            status="error",
+            summary=f"Backtest error: {exc}",
+            data=None,
+            debug_hint=str(exc),
+        ).model_dump()
     except Exception as exc:
+        logger.error("Unexpected backtest error", exc_info=True)
         return ToolResult(
             status="error",
             summary=f"Backtest error: {exc}",
@@ -110,7 +126,6 @@ def create_retriever_tool(retriever):
     ),
 )
 def search_stock_info(query: str, num_results: int = 3, hl: str = "en", gl: str = "us"):
-    BASE_URL = "http://mcp_server:8000"
     try:
         with httpx.Client(timeout=20.0) as client:
             params = {
@@ -119,7 +134,7 @@ def search_stock_info(query: str, num_results: int = 3, hl: str = "en", gl: str 
                 "hl": hl,
                 "gl": gl,
             }
-            resp = client.get(f"{BASE_URL}/search", params=params)
+            resp = client.get(f"{MCP_SERVER_URL}/search", params=params)
             if resp.status_code != 200:
                 return ToolResult(
                     status="error",

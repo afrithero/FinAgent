@@ -4,6 +4,9 @@ Each tool function must return a dict with exactly the four ToolResult keys:
   status, summary, data, debug_hint
 and LLMNode must assemble its prompt using only the summary field.
 """
+import os
+import tempfile
+
 import pytest
 from unittest.mock import MagicMock, patch
 from pydantic import ValidationError
@@ -84,8 +87,6 @@ class TestBacktestTool:
 
     def test_backtest_tool_ok_on_valid_backtester(self):
         # Build a real Backtester backed by a tiny in-memory CSV
-        import tempfile, os
-
         csv_content = (
             "Date,Open,High,Low,Close,Volume\n"
             "2024-01-01,100,105,99,101,1000\n"

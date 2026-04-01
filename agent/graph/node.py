@@ -1,3 +1,6 @@
+from typing import Any, Dict
+
+from .config import MCP_SERVER_URL
 from .tools import backtest_tool
 from .state import ToolResult
 import httpx
@@ -12,32 +15,31 @@ class LLMOutputSchema(BaseModel):
 
 
 class RetrieverNode:
-    def __init__(self, retriever, top_k=1):
+    def __init__(self, retriever: Any, top_k: int = 1) -> None:
         self.retriever = retriever
         self.top_k = top_k
 
-    def __call__(self, state):
+    def __call__(self, state: Dict[str, Any]) -> Dict[str, Any]:
         docs = self.retriever.retrieve(state["query"])
         selected_docs = docs[:self.top_k]
         debug = state.get("debug", {}).copy()
         debug["retriever_output"] = "\n---\n".join(selected_docs) if selected_docs else "[No docs]"
-        
         return {
-            "docs": selected_docs, 
-            "debug": debug
-            }
+            "docs": selected_docs,
+            "debug": debug,
+        }
 
 class BacktestNode:
     def __init__(
         self,
-        csv_path,
-        cash,
-        fast,
-        slow,
-        start_date="2024-01-01",
-        end_date=None,
-        download_stock_data=False,
-    ):
+        csv_path: str,
+        cash: float,
+        fast: int,
+        slow: int,
+        start_date: str = "2024-01-01",
+        end_date: str | None = None,
+        download_stock_data: bool = False,
+    ) -> None:
         self.csv_path = csv_path
         self.cash = cash
         self.fast = fast
@@ -45,8 +47,8 @@ class BacktestNode:
         self.start_date = start_date
         self.end_date = end_date
         self.download_stock_data = download_stock_data
-    
-    def __call__(self, state):
+
+    def __call__(self, state: Dict[str, Any]) -> Dict[str, Any]:
         ticker = state.get("ticker", "AAPL")
         market = state.get("market", "tw" if str(ticker).isdigit() else "us")
         csv_path = state.get("csv_path", self.csv_path)
@@ -91,11 +93,11 @@ def _derive_verdict(raw_text: str) -> str:
     first_line = lines[0]
     
     # Return first non-empty line, truncated
-    return first_line[:200] if len(first_line) > 200 else first_line
+    return first_line[:200]
 
 
 class LLMNode:
-    def __init__(self, llm):
+    def __init__(self, llm: Any) -> None:
         self.llm = llm
         # Default system prompt / response format
         self.system_prompt = (
@@ -106,7 +108,7 @@ class LLMNode:
             "Output plain text, not JSON.\n"
         )
 
-    def __call__(self, state):
+    def __call__(self, state: Dict[str, Any]) -> Dict[str, Any]:
         docs = state.get("docs", [])
         doc_context = (
             f"[{len(docs)} document(s) retrieved — see RetrieverNode debug for full text]"
@@ -179,13 +181,13 @@ class LLMNode:
 
 
 class SearchNode:
-    def __init__(self, num_results=3, hl="en", gl="us"):
+    def __init__(self, num_results: int = 3, hl: str = "en", gl: str = "us") -> None:
         self.num_results = num_results
         self.hl = hl
         self.gl = gl
-        self.base_url = "http://mcp_server:8000"
+        self.base_url = MCP_SERVER_URL
 
-    def __call__(self, state):
+    def __call__(self, state: Dict[str, Any]) -> Dict[str, Any]:
         query = state["query"]
         with httpx.Client(timeout=20.0) as client:
             params = {

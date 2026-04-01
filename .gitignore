@@ -10,3 +10,6 @@ data/
 
 # Config
 .env
+
+# Claude Code
+.claude/

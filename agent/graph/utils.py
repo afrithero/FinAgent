@@ -5,6 +5,8 @@ _MONTH_MAP = {
     "january": "01", "february": "02", "march": "03", "april": "04",
     "may": "05", "june": "06", "july": "07", "august": "08",
     "september": "09", "october": "10", "november": "11", "december": "12",
+    # Short-form abbreviations. "may" intentionally omitted here because it is
+    # identical to the full name and already covered by the long-form entry above.
     "jan": "01", "feb": "02", "mar": "03", "apr": "04",
     "jun": "06", "jul": "07", "aug": "08",
     "sep": "09", "oct": "10", "nov": "11", "dec": "12",
@@ -46,12 +48,12 @@ def extract_start_date(query: str) -> Optional[str]:
     return None
 
 
-def should_run_backtest(query: str) -> Optional[str]:
-    # Heuristic: backtest-related keywords + ticker in query.
+def extract_backtest_ticker(query: str) -> Optional[str]:
+    """Return the ticker symbol to backtest, or None if the query does not request a backtest."""
     backtest_keywords = ["backtest", "back-testing", "回測", "量化", "SMA"]
     if not any(k.lower() in query.lower() for k in backtest_keywords):
         return None
-    # Find uppercase alpha ticker e.g. AAPL, TSLA (2-5 chars).
+    # Uppercase alpha ticker e.g. AAPL, TSLA (2-5 chars).
     m = re.search(r"\b([A-Z]{2,5})\b", query)
     if m:
         return m.group(1)
@@ -79,7 +81,7 @@ def should_search_stock_info(query: str) -> bool:
 
 def route_state(state: Dict[str, Any]) -> Dict[str, Any]:
     query = state["query"]
-    ticker = should_run_backtest(query)
+    ticker = extract_backtest_ticker(query)
     run_search = should_search_stock_info(query)
     base = {"run_search": run_search}
     if not ticker:

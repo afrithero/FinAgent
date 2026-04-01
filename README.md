@@ -37,7 +37,7 @@ pip install -r mcp_server/requirements.txt
 ### Build the vector database
 ```bash
 cd ./agent
-python build_index.py
+python scripts/build_index.py
 ```
 This step will:
 - Load the FinDER dataset
@@ -48,18 +48,12 @@ This step will:
 ### Query the vector database
 ```bash
 cd ./agent
-python query_index.py
+python scripts/query_index.py
 ```
 This step will:
 - Load the persisted vector database
 - Use a retriever to perform semantic search
 - Return the most relevant answer snippets
-
-### Download stock market data
-```bash
-cd ./agent
-python download_stock_data.py
-```
 
 ### Run FinAgent - ReAct
 ```bash
@@ -75,8 +69,8 @@ python run_stategraph_agent.py
 
 ### Run tests (inside langgraph_agent container)
 ```bash
-docker exec langgraph_agent pytest -q -o "pythonpath=."                    # all tests
-docker exec langgraph_agent pytest -q -o "pythonpath=." tests/test_dataset.py::TestFinderDataset::test_schema_columns  # single test
+docker exec langgraph_agent pytest -q          # all tests
+docker exec langgraph_agent pytest -q tests/test_dataset.py::TestFinderDataset::test_schema_columns  # single test
 ```
 
 ## References

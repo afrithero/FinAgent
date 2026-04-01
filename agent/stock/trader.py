@@ -3,7 +3,7 @@ import pandas as pd
 from typing import Any
 
 class SmaCross(bt.Strategy):
-    params = (("fast",5), ("slow", 20),)
+    params = (("fast", 5), ("slow", 20),)
     def __init__(self):
         self.sma_fast = bt.indicators.SMA(self.data.close, period=self.params.fast)
         self.sma_slow = bt.indicators.SMA(self.data.close, period=self.params.slow)
@@ -20,7 +20,7 @@ class SmaCross(bt.Strategy):
                 self.close()
     
     def notify_order(self, order):
-        if order.status in [order.Completed]:
+        if order.status == order.Completed:
             action = "BUY" if order.isbuy() else "SELL"
             self.trade_log.append({
                 "date": self.datas[0].datetime.date(0).isoformat(),

@@ -6,7 +6,7 @@ def ds():
     return load_dataset("Linq-AI-Research/FinDER")
 
 class TestFinderDataset:
-    def train_exists(self, ds):
+    def test_train_exists(self, ds):
         assert "train" in ds
         assert len(ds["train"]) > 0
     
