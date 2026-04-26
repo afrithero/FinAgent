@@ -2,34 +2,112 @@ import backtrader as bt
 import pandas as pd
 from typing import Any
 
+
+def _log_order(strategy: bt.Strategy, order: bt.Order) -> None:
+    """Append a completed order to strategy.trade_log."""
+    if order.status == order.Completed:
+        action = "BUY" if order.isbuy() else "SELL"
+        strategy.trade_log.append({
+            "date": strategy.datas[0].datetime.date(0).isoformat(),
+            "action": action,
+            "price": order.executed.price,
+            "size": order.executed.size,
+            "value": order.executed.value,
+            "commission": order.executed.comm,
+        })
+
+
 class SmaCross(bt.Strategy):
+    """SMA crossover strategy: buy on golden cross, sell on death cross."""
+
     params = (("fast", 5), ("slow", 20),)
-    def __init__(self):
+
+    def __init__(self) -> None:
         self.sma_fast = bt.indicators.SMA(self.data.close, period=self.params.fast)
         self.sma_slow = bt.indicators.SMA(self.data.close, period=self.params.slow)
         self.crossover = bt.indicators.CrossOver(self.sma_fast, self.sma_slow)
-        self.trade_log = []
+        self.trade_log: list[dict[str, Any]] = []
 
-    def next(self):
+    def next(self) -> None:
+        if self.position.size == 0 and self.crossover > 0:
+            self.buy()
+        elif self.position.size > 0 and self.crossover < 0:
+            self.close()
+
+    def notify_order(self, order: bt.Order) -> None:
+        _log_order(self, order)
+
+
+class RSIStrategy(bt.Strategy):
+    """RSI mean-reversion strategy: buy when oversold, sell when overbought."""
+
+    params = (
+        ("rsi_period", 14),
+        ("rsi_upper", 70),
+        ("rsi_lower", 30),
+    )
+
+    def __init__(self) -> None:
+        self.rsi = bt.indicators.RSI(self.data.close, period=self.params.rsi_period)
+        self.trade_log: list[dict[str, Any]] = []
+
+    def next(self) -> None:
         if self.position.size == 0:
-            if self.crossover > 0:
+            if self.rsi < self.params.rsi_lower:
                 self.buy()
+        elif self.rsi > self.params.rsi_upper:
+            self.close()
 
-        if self.position.size > 0:
-            if self.crossover < 0:
-                self.close()
-    
-    def notify_order(self, order):
-        if order.status == order.Completed:
-            action = "BUY" if order.isbuy() else "SELL"
-            self.trade_log.append({
-                "date": self.datas[0].datetime.date(0).isoformat(),
-                "action": action,
-                "price": order.executed.price,
-                "size": order.executed.size,
-                "value": order.executed.value,
-                "commission": order.executed.comm
-            })
+    def notify_order(self, order: bt.Order) -> None:
+        _log_order(self, order)
+
+
+class MomentumStrategy(bt.Strategy):
+    """Momentum strategy: buy when recent return exceeds threshold, sell when it drops below."""
+
+    params = (
+        ("lookback_period", 20),
+        ("threshold", 0.05),
+    )
+
+    def __init__(self) -> None:
+        self.trade_log: list[dict[str, Any]] = []
+
+    def next(self) -> None:
+        if len(self.data) <= self.params.lookback_period:
+            return
+        momentum = (self.data.close[0] / self.data.close[-self.params.lookback_period]) - 1
+        if self.position.size == 0:
+            if momentum > self.params.threshold:
+                self.buy()
+        elif momentum < -self.params.threshold:
+            self.close()
+
+    def notify_order(self, order: bt.Order) -> None:
+        _log_order(self, order)
+
+
+STRATEGY_REGISTRY: dict[str, type[bt.Strategy]] = {
+    "SmaCross": SmaCross,
+    "RSIStrategy": RSIStrategy,
+    "MomentumStrategy": MomentumStrategy,
+}
+
+DEFAULT_STRATEGY_PARAMS: dict[str, dict] = {
+    "SmaCross": {"fast": 3, "slow": 37},
+    "RSIStrategy": {"rsi_period": 14, "rsi_upper": 70, "rsi_lower": 30},
+    "MomentumStrategy": {"lookback_period": 20, "threshold": 0.05},
+}
+
+# Market-specific broker defaults.
+# Taiwan (tw): minimum lot = 1000 shares; commission ~0.003 (blended, accounts for
+#              0.1425% brokerage + ~0.3% securities transaction tax on sell side).
+# US (us):     stake = 10 shares; commission ~0.001.
+MARKET_DEFAULTS: dict[str, dict] = {
+    "tw": {"stake": 1000, "commission": 0.003,  "default_cash": 1_000_000},
+    "us": {"stake":   10, "commission": 0.001,  "default_cash":    50_000},
+}
+
 
 class Backtester:
     def __init__(
@@ -37,12 +115,14 @@ class Backtester:
         csv_path: str | None,
         strategy,
         cash: float = 10000,
+        market: str = "us",
         data_df: pd.DataFrame | None = None,
         **kwargs,
     ):
         self.csv_path = csv_path
         self.strategy = strategy
         self.cash = cash
+        self.market = market
         self.data_df = data_df
         self.kwargs = kwargs
         self.results = None
@@ -73,9 +153,10 @@ class Backtester:
 
         cerebro.addstrategy(self.strategy, **self.kwargs)
 
+        market_cfg = MARKET_DEFAULTS.get(self.market, MARKET_DEFAULTS["us"])
         cerebro.broker.setcash(self.cash)
-        cerebro.broker.setcommission(commission=0.001)
-        cerebro.addsizer(bt.sizers.FixedSize, stake=10)
+        cerebro.broker.setcommission(commission=market_cfg["commission"])
+        cerebro.addsizer(bt.sizers.FixedSize, stake=market_cfg["stake"])
 
         # analyzers
         cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name="sharpe")

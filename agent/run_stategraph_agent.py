@@ -1,3 +1,8 @@
+import argparse
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
+warnings.filterwarnings("ignore", category=FutureWarning, module="google")
+
 from embedder.embedder_factory import EmbedderFactory
 from vectordb.faiss_db import FaissVectorDB
 from retriever.financial_retriever import FinancialRetriver
@@ -16,6 +21,11 @@ from utils.trace_utils import (
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--debug", action="store_true", help="Print full debug dict from each node")
+    args = parser.parse_args()
+    DEBUG = args.debug
+
     embedder = EmbedderFactory.create_embedder(
         provider="huggingface", 
         model_name="avsolatorio/GIST-all-MiniLM-L6-v2")
@@ -35,10 +45,7 @@ if __name__ == "__main__":
     
     retriever_node = RetrieverNode(retriever)
     backtest_node = BacktestNode(
-        csv_path="../data/us_stock/AAPL.csv",
-        cash=50000, 
-        fast=3, 
-        slow=37
+        cash=50000,
     )
     llm_node = LLMNode(llm)
     
@@ -81,7 +88,8 @@ if __name__ == "__main__":
     agent = graph.compile()
     
     # query = "I have already based on stock price data Apple stock (AAPL) of since January 2023 and used an SMA cross strategy for backtesting. Does Apple stock (AAPL) have growth potential in the market?"
-    query = "請分析群創（3481）的投資前景，並針對近期市場動態提供建議。請同時對 3481 股票從 2025 年 12 月起進行簡單移動平均線交叉策略的回測，並在回答中摘要回測結果。"
+    # query = "請分析群創（3481）的投資前景，並針對近期市場動態提供建議。請同時對 3481 股票從 2025 年 12 月起進行簡單移動平均線交叉策略的回測，並在回答中摘要回測結果。"
+    query = "NVDA 的投資前景如何？請分析相關的市場趨勢和公司基本面，並提供具體的投資建議。如果需要，請從 2024 年初開始對 NVDA 股票進行回測，使用簡單移動平均線交叉策略，並在回答中摘要回測結果。"
     print("=" * 60)
     print("StateGraph Execution Trace")
     print("=" * 60)
@@ -142,20 +150,23 @@ if __name__ == "__main__":
                 validation = validate_tool_result(backtest)
                 summary = format_tool_result_summary(backtest)
                 print(f"   {summary}")
-                # Print key performance fields and sample trades
-                if backtest and backtest.get("data"):
-                    perf = backtest.get("data", {}).get("performance", {})
-                    if perf:
-                        print(f"   --- Performance:")
-                        print(f"       Initial Cash: {perf.get('initial_cash', 'N/A')}")
-                        print(f"       Final Cash: {perf.get('final_cash', 'N/A')}")
-                        print(f"       Return %: {perf.get('return_pct', 'N/A')}")
-                        print(f"       Sharpe Ratio: {perf.get('sharpe_ratio', 'N/A')}")
-                    trades = backtest.get("data", {}).get("trades", [])
-                    if trades:
-                        print(f"   --- Sample Trades ({len(trades)} total):")
-                        for i, trade in enumerate(trades[:3]):  # Show first 3 trades
-                            print(f"       [{i+1}] {trade.get('date')}: {trade.get('action')} {trade.get('size')} @ {trade.get('price')}")
+                # Print per-strategy performance and sample trades
+                if backtest and isinstance(backtest.get("data"), dict):
+                    for strategy_name, strategy_data in backtest["data"].items():
+                        print(f"   --- {strategy_name} ({strategy_data.get('status', 'unknown')}):")
+                        perf = strategy_data.get("performance") or {}
+                        if perf:
+                            print(f"       Initial Cash: {perf.get('initial_cash', 'N/A')}")
+                            print(f"       Final Cash:   {perf.get('final_cash', 'N/A')}")
+                            print(f"       Return %:     {perf.get('return_pct', 'N/A')}")
+                            print(f"       Sharpe Ratio: {perf.get('sharpe_ratio', 'N/A')}")
+                        elif strategy_data.get("status") == "error":
+                            print(f"       Error: {strategy_data.get('error', 'N/A')}")
+                        trades = strategy_data.get("trades", [])
+                        if trades:
+                            print(f"       Sample Trades ({len(trades)} total):")
+                            for i, trade in enumerate(trades[:3]):
+                                print(f"         [{i+1}] {trade.get('date')}: {trade.get('action')} {trade.get('size')} @ {trade.get('price')}")
                 print_contract_check("backtest", validation)
                 stage_results["backtest"] = validation
                 
@@ -182,7 +193,15 @@ if __name__ == "__main__":
                     print(f"   Raw answer: {str(answer)[:80]}...")
                 print_contract_check("llm", validation)
                 stage_results["llm"] = validation
-                
+
+            if DEBUG:
+                debug = node_output.get("debug", {})
+                if debug:
+                    print(f"   [debug]")
+                    for k, v in debug.items():
+                        v_str = str(v)
+                        print(f"     {k}: {v_str[:300] + '...' if len(v_str) > 300 else v_str}")
+
             print()
     
     print_stage("stategraph", "complete")

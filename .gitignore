@@ -1,4 +1,5 @@
 # Python
+# o
 __pycache__/
 .pytest_cache
 
@@ -11,5 +12,8 @@ data/
 # Config
 .env
 
-# Claude Code
+# agent
 .claude/
+.ccb/
+IMPLEMENTATION_BRIEF.md
+CLAUDE.md

@@ -1,10 +1,8 @@
 from typing import Any, Dict
 
-from .config import MCP_SERVER_URL
-from .tools import backtest_tool
-from .state import ToolResult
-import httpx
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from .tools import backtest_tool, search_stock_info
+from pydantic import BaseModel, ConfigDict, ValidationError
+from stock.trader import DEFAULT_STRATEGY_PARAMS, MARKET_DEFAULTS, STRATEGY_REGISTRY
 
 
 class LLMOutputSchema(BaseModel):
@@ -32,49 +30,89 @@ class RetrieverNode:
 class BacktestNode:
     def __init__(
         self,
-        csv_path: str,
-        cash: float,
-        fast: int,
-        slow: int,
+        cash: float | None = None,
+        csv_path: str | None = None,
         start_date: str = "2024-01-01",
         end_date: str | None = None,
         download_stock_data: bool = False,
+        strategy_params: dict[str, dict] | None = None,
     ) -> None:
-        self.csv_path = csv_path
         self.cash = cash
-        self.fast = fast
-        self.slow = slow
+        self.csv_path = csv_path
         self.start_date = start_date
         self.end_date = end_date
         self.download_stock_data = download_stock_data
+        # Merge user-supplied overrides on top of defaults per strategy.
+        self.strategy_params: dict[str, dict] = {}
+        for name in STRATEGY_REGISTRY:
+            base = dict(DEFAULT_STRATEGY_PARAMS.get(name, {}))
+            overrides = (strategy_params or {}).get(name, {})
+            base.update(overrides)
+            self.strategy_params[name] = base
 
     def __call__(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        ticker = state.get("ticker", "AAPL")
+        ticker = state.get("ticker")
+        if not ticker:
+            raise ValueError("BacktestNode requires 'ticker' in state; route_state must set it before backtest runs.")
         market = state.get("market", "tw" if str(ticker).isdigit() else "us")
-        csv_path = state.get("csv_path", self.csv_path)
-        result = backtest_tool.invoke({
-            "ticker": ticker,
-            "market": market,
-            "start_date": state.get("start_date", self.start_date),
-            "end_date": state.get("end_date", self.end_date),
-            "csv_path": csv_path,
-            "cash": self.cash,
-            "fast": self.fast,
-            "slow": self.slow,
-            "download_stock_data": state.get("download_stock_data", self.download_stock_data),
-        })
+        cash = self.cash if self.cash is not None else MARKET_DEFAULTS.get(market, MARKET_DEFAULTS["us"])["default_cash"]
+        csv_path = state.get("csv_path") or self.csv_path
+        start_date = state.get("start_date", self.start_date)
+        end_date = state.get("end_date", self.end_date)
+        download = state.get("download_stock_data", self.download_stock_data)
 
-        debug = state.get("debug", {}).copy()
-        debug["backtest_ticker"] = ticker
-        debug["backtest_market"] = market
-        debug["backtest_csv_path"] = csv_path
-        debug["backtest_output"] = str(result)
-        
-        return {
-            "docs": state["docs"],
-            "backtest": result,
-            "debug": debug
+        per_strategy: dict[str, Any] = {}
+        summary_lines: list[str] = []
+
+        for strategy_name in STRATEGY_REGISTRY:
+            raw = backtest_tool.invoke({
+                "ticker": ticker,
+                "market": market,
+                "start_date": start_date,
+                "end_date": end_date,
+                "csv_path": csv_path,
+                "cash": cash,
+                "strategy": strategy_name,
+                "params": self.strategy_params[strategy_name],
+                "download_stock_data": download,
+            })
+            if raw.get("status") == "ok":
+                perf = raw.get("data", {}).get("performance", {})
+                trades = raw.get("data", {}).get("trades", [])
+                ret_pct = perf.get("return_pct")
+                ret_text = f"{ret_pct:.2%}" if isinstance(ret_pct, (int, float)) else "N/A"
+                summary_lines.append(
+                    f"- {strategy_name}: Return={ret_text} | Sharpe={perf.get('sharpe_ratio')} | Trades={len(trades)}"
+                )
+                per_strategy[strategy_name] = {"performance": perf, "trades": trades, "status": "ok"}
+            else:
+                error_msg = raw.get("summary", "unknown error")
+                summary_lines.append(f"- {strategy_name}: Error — {error_msg}")
+                per_strategy[strategy_name] = {
+                    "performance": None, "trades": [], "status": "error", "error": error_msg,
+                }
+
+        all_failed = all(v["status"] == "error" for v in per_strategy.values())
+        end_display = end_date or "today"
+        combined_summary = (
+            f"Multi-strategy backtest ({ticker.upper()}, {start_date} to {end_display}):\n"
+            + "\n".join(summary_lines)
+        )
+
+        result = {
+            "status": "error" if all_failed else "ok",
+            "summary": combined_summary,
+            "data": per_strategy,
+            "debug_hint": None,
         }
+        debug = state.get("debug", {}).copy()
+        debug.update({
+            "backtest_ticker": ticker,
+            "backtest_market": market,
+            "backtest_csv_path": csv_path,
+            "backtest_output": combined_summary,
+        })
+        return {"docs": state["docs"], "backtest": result, "debug": debug}
 
 def _derive_verdict(raw_text: str) -> str:
     """Derive verdict deterministically from raw LLM text.
@@ -185,52 +223,14 @@ class SearchNode:
         self.num_results = num_results
         self.hl = hl
         self.gl = gl
-        self.base_url = MCP_SERVER_URL
 
     def __call__(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        query = state["query"]
-        with httpx.Client(timeout=20.0) as client:
-            params = {
-                "query": query,
-                "num_results": self.num_results,
-                "hl": self.hl,
-                "gl": self.gl,
-            }
-            resp = client.get(f"{self.base_url}/search", params=params)
-            if resp.status_code != 200:
-                result = ToolResult(
-                    status="error",
-                    summary=f"Search failed: HTTP {resp.status_code}",
-                    data=None,
-                    debug_hint=resp.text[:200],
-                ).model_dump()
-                debug = state.get("debug", {}).copy()
-                debug["search_output"] = result["summary"]
-                return {"search_results": result, "debug": debug}
-            data = resp.json()
-            items = data.get("results", [])
-            if not items:
-                result = ToolResult(
-                    status="empty",
-                    summary="No search results found for this query.",
-                    data=None,
-                    debug_hint=None,
-                ).model_dump()
-                debug = state.get("debug", {}).copy()
-                debug["search_output"] = result["summary"]
-                return {"search_results": result, "debug": debug}
-            summary_text = "\n".join(
-                [f"- {r['title']}  ({r['link']})" for r in items]
-            )
-            result = ToolResult(
-                status="ok",
-                summary=summary_text,
-                data=items,
-                debug_hint=None,
-            ).model_dump()
+        result = search_stock_info.invoke({
+            "query": state["query"],
+            "num_results": self.num_results,
+            "hl": self.hl,
+            "gl": self.gl,
+        })
         debug = state.get("debug", {}).copy()
-        debug["search_output"] = summary_text
-        return {
-            "search_results": result,
-            "debug": debug
-        }
+        debug["search_output"] = result.get("summary", "")
+        return {"search_results": result, "debug": debug}

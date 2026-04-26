@@ -1,7 +1,7 @@
 import logging
 
 from langchain_core.tools import tool
-from stock.trader import Backtester, SmaCross
+from stock.trader import Backtester, SmaCross, STRATEGY_REGISTRY, DEFAULT_STRATEGY_PARAMS
 from stock.stock_loader import resolve_stock_data
 import httpx
 import pandas as pd
@@ -16,9 +16,10 @@ logger = logging.getLogger(__name__)
 @tool(
     "backtest",
     description=(
-        "Run SMA cross backtest on stock data with deterministic data resolution "
-        "(cache -> csv -> live fetch for US). "
-        "Supports forcing a fresh download via download_stock_data=true."
+        "Run a backtest on stock data. "
+        "strategy: one of 'SmaCross' (default), 'RSIStrategy', 'MomentumStrategy'. "
+        "params: strategy-specific parameter overrides (optional dict). "
+        "Data resolution order: cache -> csv -> live fetch."
     ),
 )
 def backtest_tool(
@@ -26,13 +27,19 @@ def backtest_tool(
     market: str = "us",
     start_date: str = "2024-01-01",
     end_date: str | None = None,
-    csv_path: str = "../data/us_stock/AAPL.csv",
+    csv_path: str | None = None,
     cash: float = 50000,
-    fast: int = 3,
-    slow: int = 37,
+    strategy: str = "SmaCross",
+    params: dict | None = None,
     download_stock_data: bool = False,
 ):
     try:
+        if strategy not in STRATEGY_REGISTRY:
+            raise ValueError(
+                f"Unknown strategy '{strategy}'. "
+                f"Available: {sorted(STRATEGY_REGISTRY.keys())}"
+            )
+
         if not end_date:
             end_date = pd.Timestamp.today().strftime("%Y-%m-%d")
 
@@ -44,20 +51,25 @@ def backtest_tool(
             csv_path=csv_path,
             download_stock_data=download_stock_data,
         )
+
+        strategy_cls = STRATEGY_REGISTRY[strategy]
+        strategy_kwargs: dict = params or {}
+
         bt_runner = Backtester(
-            csv_path=resolved.get("csv_path") or csv_path,
+            csv_path=resolved.get("csv_path"),
             data_df=resolved["df"],
-            strategy=SmaCross,
+            strategy=strategy_cls,
             cash=cash,
-            fast=fast,
-            slow=slow,
+            market=market,
+            **strategy_kwargs,
         )
         bt_runner.run()
         base = bt_runner.to_tool_result()
         result = {
             **base,
             "summary": (
-                f"{base['summary']} | Data source: {resolved['source']} "
+                f"{base['summary']} | Strategy: {strategy} "
+                f"| Data source: {resolved['source']} "
                 f"({ticker.upper()} {start_date} to {end_date})"
             ),
         }

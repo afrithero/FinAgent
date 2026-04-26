@@ -230,7 +230,7 @@ class TestSearchNode:
             {"title": "Apple Q4 Earnings Beat", "link": "https://example.com/1"},
             {"title": "AAPL Target Price Upgrade", "link": "https://example.com/2"},
         ]
-        with patch("graph.node.httpx.Client") as MockClient:
+        with patch("graph.tools.httpx.Client") as MockClient:
             mock_instance = MagicMock()
             mock_instance.__enter__ = MagicMock(return_value=mock_instance)
             mock_instance.__exit__ = MagicMock(return_value=False)
@@ -256,7 +256,7 @@ class TestSearchNode:
     def test_searchnode_empty(self):
         from graph.node import SearchNode
 
-        with patch("graph.node.httpx.Client") as MockClient:
+        with patch("graph.tools.httpx.Client") as MockClient:
             mock_instance = MagicMock()
             mock_instance.__enter__ = MagicMock(return_value=mock_instance)
             mock_instance.__exit__ = MagicMock(return_value=False)
@@ -277,7 +277,7 @@ class TestSearchNode:
     def test_searchnode_http_error(self):
         from graph.node import SearchNode
 
-        with patch("graph.node.httpx.Client") as MockClient:
+        with patch("graph.tools.httpx.Client") as MockClient:
             mock_instance = MagicMock()
             mock_instance.__enter__ = MagicMock(return_value=mock_instance)
             mock_instance.__exit__ = MagicMock(return_value=False)
